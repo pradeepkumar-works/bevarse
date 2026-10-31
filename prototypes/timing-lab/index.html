@@ -1,0 +1,400 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bevarse Timing Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow lab bench. Header, two views (timing, renderer), each a stack of instrument panels. */
+:root {
+  --bg: #f3f5f7; --panel: #ffffff; --fg: #17202a; --muted: #5b6875; --line: #d7dde3;
+  --accent: #0f7d74; --left: #b86a12; --bad: #b3261e; --good: #1d7a3a;
+  --key-white: #ffffff; --key-black: #1d242c; --roll: #10161d;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1318; --panel: #161d24; --fg: #e4e9ee; --muted: #93a1ae; --line: #2a343e;
+  --accent: #3cc3b5; --left: #e3a14f; --bad: #f2867d; --good: #6fcf8f;
+  --key-white: #e9edf1; --key-black: #0b0f13; --roll: #0a0e12; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e1318; --panel: #161d24; --fg: #e4e9ee; --muted: #93a1ae; --line: #2a343e;
+  --accent: #3cc3b5; --left: #e3a14f; --bad: #f2867d; --good: #6fcf8f;
+  --key-white: #e9edf1; --key-black: #0b0f13; --roll: #0a0e12; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 880px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-size: 24px; font-weight: 600; margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; margin: 0; }
+p { margin: 0; max-width: 65ch; }
+.muted { color: var(--muted); }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+nav { display: flex; gap: 8px; flex-wrap: wrap; }
+nav a { font-weight: 500; text-decoration: none; color: var(--fg); padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+nav a[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+button, select { font: 500 14px var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 9px 14px; min-height: 40px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+button:focus-visible, select:focus-visible, nav a:focus-visible, .key:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[disabled] { opacity: .5; cursor: default; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; }
+.stat b { font: 500 20px var(--mono); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12.5px; color: var(--muted); }
+.pill { display: inline-block; font: 500 12px var(--mono); padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--good); } .pill.no { color: var(--bad); } .pill.wait { color: var(--muted); }
+.kbd-wrap { overflow-x: auto; }
+.kbd { position: relative; height: 150px; min-width: 560px; user-select: none; touch-action: none; }
+.key { position: absolute; top: 0; border: 1px solid var(--line); border-radius: 0 0 5px 5px; }
+.key.w { background: var(--key-white); height: 150px; z-index: 1; }
+.key.b { background: var(--key-black); height: 92px; z-index: 2; border-color: var(--key-black); }
+.key.on.w { background: color-mix(in srgb, var(--accent) 35%, var(--key-white)); }
+.key.on.b { background: var(--accent); }
+.key small { position: absolute; bottom: 6px; left: 0; right: 0; text-align: center; font: 11px var(--mono); color: #6b7783; }
+.tap { width: 100%; min-height: 72px; font-size: 16px; }
+.log { font: 12.5px/1.5 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; white-space: pre-wrap; overflow-x: auto; max-height: 220px; overflow-y: auto; }
+.stage { position: relative; background: var(--roll); border-radius: 6px; overflow: hidden; aspect-ratio: 16 / 10; max-width: 100%; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+th { font-weight: 500; color: var(--muted); font-size: 12.5px; }
+td.num { font-family: var(--mono); }
+.table-wrap { overflow-x: auto; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Bevarse / throwaway prototype</div>
+    <h1>Timing lab</h1>
+    <p class="muted">Two measurements decide the app's build: how fast a key press becomes sound in your browser, and which renderer draws falling notes smoothly. Nothing here is app code. Run it on your laptop and your phone, then press Copy results and paste them into the thread.</p>
+  </header>
+
+  <nav>
+    <a href="#timing" id="nav-timing">Timing</a>
+    <a href="#renderer" id="nav-renderer">Renderer</a>
+  </nav>
+
+  <div id="view-timing" class="view" style="display:grid; gap:20px">
+    <section class="panel">
+      <h2>1. Start audio</h2>
+      <p class="muted">Browsers only play sound after a tap. This creates the audio clock that every other number uses.</p>
+      <div class="row"><button class="primary" id="start-audio">Start audio</button><span id="audio-state" class="pill wait">not started</span></div>
+      <div class="stats">
+        <div class="stat"><b id="s-rate">-</b><span>sample rate, Hz</span></div>
+        <div class="stat"><b id="s-base">-</b><span>base latency, ms</span></div>
+        <div class="stat"><b id="s-out">-</b><span>output latency, ms (browser estimate)</span></div>
+        <div class="stat"><b id="s-total">-</b><span>press to sound, ms (estimate, median)</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>2. Play the keys</h2>
+      <p class="muted">Tap the keys, use the computer keys A W S E D F T G Y H U J K, or play a MIDI keyboard. Each press logs how long the browser took to hand us the event.</p>
+      <div class="kbd-wrap"><div class="kbd" id="kbd" aria-label="On-screen piano, two octaves from C4"></div></div>
+      <div class="row"><span>MIDI keyboard:</span><span id="midi-state" class="pill wait">checking</span><span id="midi-name" class="muted"></span></div>
+      <div class="stats">
+        <div class="stat"><b id="s-touch">-</b><span>touch or mouse event delay, ms (median)</span></div>
+        <div class="stat"><b id="s-key">-</b><span>computer key event delay, ms (median)</span></div>
+        <div class="stat"><b id="s-midi">-</b><span>MIDI event delay, ms (median)</span></div>
+        <div class="stat"><b id="s-midij">-</b><span>MIDI delay spread p95 minus p50, ms</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3. Tap along to calibrate</h2>
+      <p class="muted">Press Start, then tap the big button (or the space bar) on every click you hear. 16 clicks at 90 BPM; the first 4 are a count-in and are not scored. The result is how late your taps land against the sound, which is the offset the app would subtract.</p>
+      <div class="row"><button id="cal-start" disabled>Start 16 clicks</button><span id="cal-state" class="muted">Start audio first.</span></div>
+      <button class="tap" id="tap" disabled>Tap on the click</button>
+      <div class="stats">
+        <div class="stat"><b id="c-med">-</b><span>tap offset, ms (median)</span></div>
+        <div class="stat"><b id="c-spread">-</b><span>tap spread, ms (middle half)</span></div>
+        <div class="stat"><b id="c-n">-</b><span>taps scored</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="view-renderer" class="view" style="display:none; gap:20px">
+    <section class="panel">
+      <h2>Falling notes: Canvas 2D or Skia</h2>
+      <p class="muted">Both draw the same notes. Skia here is CanvasKit 0.39.1, the engine React Native Skia uses on web. Run each for 10 seconds; the run with the lower 95th percentile frame time and fewer slow frames wins. Tap the roll to turn on sound; some notes then play as they reach the keys.</p>
+      <div class="row">
+        <label for="engine">Renderer</label>
+        <select id="engine"><option value="canvas">Canvas 2D</option><option value="skia">Skia (CanvasKit)</option></select>
+        <label for="density">Notes on screen</label>
+        <select id="density"><option value="60">60, easy song</option><option value="200" selected>200, busy song</option><option value="400">400, stress</option></select>
+        <button class="primary" id="bench">Run 10 s test</button>
+        <span id="bench-state" class="muted"></span>
+      </div>
+      <div class="stage" id="stage"><canvas id="c2d"></canvas><canvas id="cskia" style="display:none"></canvas></div>
+      <div class="stats">
+        <div class="stat"><b id="r-p50">-</b><span>frame interval p50, ms</span></div>
+        <div class="stat"><b id="r-p95">-</b><span>frame interval p95, ms</span></div>
+        <div class="stat"><b id="r-slow">-</b><span>frames over 20 ms, %</span></div>
+        <div class="stat"><b id="r-draw">-</b><span>draw work p95, ms</span></div>
+        <div class="stat"><b id="r-load">-</b><span>Skia load: MB, ms</span></div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Run</th><th>Renderer</th><th>Notes</th><th>p50 ms</th><th>p95 ms</th><th>Slow %</th><th>Draw p95 ms</th></tr></thead><tbody id="runs"><tr><td colspan="7" class="muted">No runs yet.</td></tr></tbody></table></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Results</h2>
+    <div class="row"><button class="primary" id="copy">Copy results</button><span id="copy-state" class="muted"></span></div>
+    <pre class="log" id="out">Results appear here as you measure.</pre>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 1) => (v == null || !isFinite(v)) ? '-' : v.toFixed(d);
+const q = (arr, p) => { if (!arr.length) return NaN; const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))]; };
+
+const results = { ua: navigator.userAgent, screen: `${screen.width}x${screen.height}@${devicePixelRatio}`, audio: {}, delays: { touch: [], key: [], midi: [] }, calibration: null, renderer: [] };
+function render() {
+  const r = results;
+  const out = {
+    browser: r.ua, screen: r.screen, audio: r.audio,
+    eventDelayMedianMs: { touch: +fmt(q(r.delays.touch, .5)), key: +fmt(q(r.delays.key, .5)), midi: +fmt(q(r.delays.midi, .5)) },
+    midiSpreadMs: +fmt(q(r.delays.midi, .95) - q(r.delays.midi, .5)),
+    presses: { touch: r.delays.touch.length, key: r.delays.key.length, midi: r.delays.midi.length },
+    midi: r.midi, calibration: r.calibration, skiaLoad: r.skiaLoad || null, renderer: r.renderer
+  };
+  $('out').textContent = JSON.stringify(out, null, 2);
+}
+
+/* Views */
+function route() {
+  const v = location.hash === '#renderer' ? 'renderer' : 'timing';
+  $('view-timing').style.display = v === 'timing' ? 'grid' : 'none';
+  $('view-renderer').style.display = v === 'renderer' ? 'grid' : 'none';
+  $('nav-timing').toggleAttribute('aria-current', v === 'timing'); if (v === 'timing') $('nav-timing').setAttribute('aria-current', 'page');
+  $('nav-renderer').toggleAttribute('aria-current', v === 'renderer'); if (v === 'renderer') $('nav-renderer').setAttribute('aria-current', 'page');
+  if (v === 'renderer') startRoll();
+}
+addEventListener('hashchange', route);
+
+/* Audio: a simple piano-like voice, two detuned partials with a fast decay. */
+let ctx = null, master = null;
+function startAudio() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);
+  ctx.resume();
+  const base = (ctx.baseLatency || 0) * 1000, out = (ctx.outputLatency || 0) * 1000;
+  results.audio = { sampleRate: ctx.sampleRate, baseLatencyMs: +fmt(base, 2), outputLatencyMs: +fmt(out, 2), outputLatencyReported: !!ctx.outputLatency };
+  $('s-rate').textContent = ctx.sampleRate; $('s-base').textContent = fmt(base); $('s-out').textContent = ctx.outputLatency ? fmt(out) : 'n/r';
+  $('audio-state').textContent = 'running'; $('audio-state').className = 'pill ok';
+  $('cal-start').disabled = false; $('cal-state').textContent = 'Ready.';
+  setTimeout(() => { if (ctx.outputLatency) { results.audio.outputLatencyMs = +fmt(ctx.outputLatency * 1000, 2); results.audio.outputLatencyReported = true; $('s-out').textContent = fmt(ctx.outputLatency * 1000); updateTotal(); render(); } }, 800);
+  render();
+}
+$('start-audio').addEventListener('click', startAudio);
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+function voice(midi, when, vel = 0.8, dur = 1.2) {
+  if (!ctx) return;
+  const t = when ?? ctx.currentTime;
+  const g = ctx.createGain(); g.connect(master);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.35 * vel, t + 0.004); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  [1, 2.001].forEach((mult, i) => { const o = ctx.createOscillator(); o.type = i ? 'sine' : 'triangle'; o.frequency.value = hz(midi) * mult; o.connect(g); o.start(t); o.stop(t + dur + 0.05); });
+}
+function click(when, accent) {
+  const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = accent ? 1760 : 1320; o.connect(g); g.connect(master);
+  g.gain.setValueAtTime(0.6, when); g.gain.exponentialRampToValueAtTime(0.001, when + 0.05); o.start(when); o.stop(when + 0.06);
+}
+function updateTotal() {
+  const all = [...results.delays.touch, ...results.delays.key, ...results.delays.midi];
+  if (!ctx || !all.length) return;
+  const est = q(all, .5) + (ctx.baseLatency || 0) * 1000 + (ctx.outputLatency || 0) * 1000;
+  results.audio.pressToSoundEstimateMs = +fmt(est); $('s-total').textContent = fmt(est);
+}
+
+/* Keyboard: C4..B5 */
+const LOW = 60, HIGH = 83, isBlack = m => [1, 3, 6, 8, 10].includes(m % 12);
+const comp = { a: 60, w: 61, s: 62, e: 63, d: 64, f: 65, t: 66, g: 67, y: 68, h: 69, u: 70, j: 71, k: 72 };
+const keyEls = {};
+(function buildKbd() {
+  const kbd = $('kbd'); const whites = []; for (let m = LOW; m <= HIGH; m++) if (!isBlack(m)) whites.push(m);
+  const ww = 100 / whites.length;
+  for (let m = LOW; m <= HIGH; m++) {
+    const el = document.createElement('div'); el.className = 'key ' + (isBlack(m) ? 'b' : 'w'); el.dataset.m = m;
+    if (isBlack(m)) { const left = whites.indexOf(m - 1); el.style.left = `calc(${(left + 1) * ww}% - ${ww * 0.3}%)`; el.style.width = `${ww * 0.6}%`; }
+    else { el.style.left = `${whites.indexOf(m) * ww}%`; el.style.width = `${ww}%`; if (m % 12 === 0) el.innerHTML = `<small>C${m / 12 - 1}</small>`; }
+    kbd.appendChild(el); keyEls[m] = el;
+  }
+  kbd.addEventListener('pointerdown', e => { const k = e.target.closest('.key'); if (!k) return; e.preventDefault(); press(+k.dataset.m, 'touch', performance.now() - e.timeStamp); });
+})();
+function flash(m) { const el = keyEls[m]; if (!el) return; el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 140); }
+function press(m, kind, delay, vel) {
+  if (!ctx) startAudio();
+  voice(m, null, vel ?? 0.8); flash(m);
+  if (delay >= 0 && delay < 1000) results.delays[kind].push(delay);
+  const d = results.delays[kind]; $({ touch: 's-touch', key: 's-key', midi: 's-midi' }[kind]).textContent = fmt(q(d, .5));
+  if (kind === 'midi') $('s-midij').textContent = fmt(q(d, .95) - q(d, .5));
+  updateTotal(); render();
+}
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  if (e.code === 'Space' && calRunning) { e.preventDefault(); tap(e.timeStamp); return; }
+  const m = comp[e.key.toLowerCase()]; if (m && location.hash !== '#renderer') press(m, 'key', performance.now() - e.timeStamp);
+});
+
+/* MIDI */
+(async function midi() {
+  if (!navigator.requestMIDIAccess) { $('midi-state').textContent = 'not supported here'; $('midi-state').className = 'pill no'; $('midi-name').textContent = 'Safari has no Web MIDI. Try Chrome, Edge or Firefox.'; results.midi = 'unsupported'; render(); return; }
+  try {
+    const acc = await navigator.requestMIDIAccess();
+    const hook = () => {
+      const ins = [...acc.inputs.values()];
+      ins.forEach(i => i.onmidimessage = ev => { const [st, n, v] = ev.data; if ((st & 0xf0) === 0x90 && v > 0) press(n, 'midi', performance.now() - ev.timeStamp, v / 127); });
+      $('midi-state').textContent = ins.length ? 'connected' : 'no device'; $('midi-state').className = 'pill ' + (ins.length ? 'ok' : 'wait');
+      $('midi-name').textContent = ins.map(i => i.name).join(', ') || 'Plug in a keyboard; it shows up here.';
+      results.midi = ins.map(i => i.name); render();
+    };
+    acc.onstatechange = hook; hook();
+  } catch (err) {
+    $('midi-state').textContent = 'blocked'; $('midi-state').className = 'pill no';
+    $('midi-name').textContent = 'This page frame does not allow MIDI. Run prototypes/timing-lab from the repo locally to test a MIDI keyboard.';
+    results.midi = 'blocked: ' + err.name; render();
+  }
+})();
+
+/* Calibration */
+let calRunning = false, calClicks = [], calTaps = [];
+function perfToAudio(perfMs) {
+  if (ctx.getOutputTimestamp) { const ts = ctx.getOutputTimestamp(); if (ts.performanceTime) return ts.contextTime + (perfMs - ts.performanceTime) / 1000; }
+  return ctx.currentTime - (performance.now() - perfMs) / 1000 - (ctx.outputLatency || ctx.baseLatency || 0);
+}
+$('cal-start').addEventListener('click', () => {
+  if (!ctx || calRunning) return;
+  calRunning = true; calClicks = []; calTaps = [];
+  const beat = 60 / 90, t0 = ctx.currentTime + 0.4;
+  for (let i = 0; i < 16; i++) { const t = t0 + i * beat; click(t, i % 4 === 0); calClicks.push(t); }
+  $('tap').disabled = false; $('tap').focus(); $('cal-state').textContent = 'Listening. Tap on every click.';
+  setTimeout(finishCal, (0.4 + 16 * beat + 0.6) * 1000);
+});
+$('tap').addEventListener('pointerdown', e => { e.preventDefault(); if (calRunning) tap(e.timeStamp); });
+function tap(ts) { calTaps.push(perfToAudio(ts)); $('tap').textContent = `Tap on the click (${calTaps.length})`; }
+function finishCal() {
+  calRunning = false; $('tap').disabled = true; $('tap').textContent = 'Tap on the click';
+  const offs = [];
+  calTaps.forEach(t => { let best = null; calClicks.slice(4).forEach(c => { const d = (t - c) * 1000; if (Math.abs(d) < 250 && (best === null || Math.abs(d) < Math.abs(best))) best = d; }); if (best !== null) offs.push(best); });
+  if (offs.length < 4) { $('cal-state').textContent = `Only ${offs.length} taps landed near a click. Try again.`; return; }
+  const med = q(offs, .5), spread = q(offs, .75) - q(offs, .25);
+  results.calibration = { medianOffsetMs: +fmt(med), middleHalfSpreadMs: +fmt(spread), taps: offs.length };
+  $('c-med').textContent = fmt(med); $('c-spread').textContent = fmt(spread); $('c-n').textContent = offs.length;
+  $('cal-state').textContent = 'Done. Run it again to check it repeats.'; render();
+}
+
+/* Renderer: generated song, same notes for both engines */
+const ROLL_LOW = 36, ROLL_HIGH = 96, SPAN = ROLL_HIGH - ROLL_LOW + 1, LOOK = 3.0;
+let notes = [];
+function makeSong(perScreen) {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const total = perScreen * 8, dur = LOOK * 8; notes = [];
+  for (let i = 0; i < total; i++) { const right = rnd() > 0.4; const p = right ? 60 + Math.floor(rnd() * 36) : 36 + Math.floor(rnd() * 24);
+    notes.push({ p, t: rnd() * dur, d: 0.12 + rnd() * 0.6, right }); }
+  notes.sort((a, b) => a.t - b.t); return dur;
+}
+let songLen = makeSong(200);
+const now = () => (ctx ? ctx.currentTime : performance.now() / 1000);
+function layout(w, h) {
+  const keyH = Math.round(h * 0.16), rollH = h - keyH, colW = w / SPAN;
+  return { keyH, rollH, colW, pps: rollH / LOOK };
+}
+function visible(t) { const out = []; for (const n of notes) { if (n.t > t + LOOK) break; if (n.t + n.d >= t) out.push(n); }
+  if (t + LOOK > songLen) for (const n of notes) { if (n.t + songLen > t + LOOK) break; out.push({ ...n, t: n.t + songLen }); }
+  return out; }
+function colors() { const cs = getComputedStyle(document.documentElement); return { right: cs.getPropertyValue('--accent').trim(), left: cs.getPropertyValue('--left').trim(), white: cs.getPropertyValue('--key-white').trim(), black: cs.getPropertyValue('--key-black').trim(), line: cs.getPropertyValue('--line').trim() }; }
+
+let engine = 'canvas', rollOn = false, playedUpTo = 0, frames = [], draws = [], lastFrame = 0, benchUntil = 0, col = null;
+const c2d = $('c2d'), cskia = $('cskia');
+function sizeCanvas(cv) { const r = cv.getBoundingClientRect(); const dpr = Math.min(devicePixelRatio || 1, 2); const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr)); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; return true; } return false; }
+
+function drawCanvas(t) {
+  sizeCanvas(c2d); const g = c2d.getContext('2d'), w = c2d.width, h = c2d.height, L = layout(w, h);
+  g.clearRect(0, 0, w, h);
+  for (const n of visible(t)) { const x = (n.p - ROLL_LOW) * L.colW, y1 = L.rollH - (n.t - t) * L.pps, y0 = y1 - n.d * L.pps;
+    g.fillStyle = n.right ? col.right : col.left; g.beginPath(); g.roundRect(x + 1, y0, L.colW - 2, Math.max(4, y1 - y0), 3); g.fill(); }
+  g.fillStyle = col.white; g.fillRect(0, L.rollH, w, L.keyH);
+  for (let m = ROLL_LOW; m <= ROLL_HIGH; m++) if (isBlack(m)) { g.fillStyle = col.black; g.fillRect((m - ROLL_LOW) * L.colW, L.rollH, L.colW, L.keyH * 0.62); }
+  for (let m = ROLL_LOW; m <= ROLL_HIGH; m++) if (m % 12 === 0) { g.fillStyle = col.line; g.fillRect((m - ROLL_LOW) * L.colW, L.rollH, 1, L.keyH); }
+}
+
+let CK = null, surf = null, ckPaints = null, ckLoad = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+async function loadSkia() {
+  if (CK) return CK;
+  const t0 = performance.now(); let base = './';
+  try { await loadScript('./canvaskit.js'); } catch { base = 'https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.39.1/bin/'; await loadScript(base + 'canvaskit.js'); }
+  CK = await window.CanvasKitInit({ locateFile: f => base + f });
+  const ms = performance.now() - t0;
+  const ent = performance.getEntriesByType('resource').filter(e => /canvaskit\.(js|wasm)/.test(e.name));
+  const bytes = ent.reduce((s, e) => s + (e.transferSize || e.encodedBodySize || 0), 0);
+  ckLoad = { ms: Math.round(ms), mb: bytes ? +(bytes / 1048576).toFixed(2) : null };
+  $('r-load').textContent = `${ckLoad.mb ?? '?'} MB, ${ckLoad.ms}`;
+  results.skiaLoad = ckLoad; render(); return CK;
+}
+function hexToCk(c) { const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d); const m = getComputedStyle(d).color.match(/\d+(\.\d+)?/g).map(Number); d.remove(); return CK.Color(m[0], m[1], m[2], m[3] ?? 1); }
+function makeSurface() {
+  if (surf) { surf.delete(); surf = null; }
+  sizeCanvas(cskia);
+  surf = CK.MakeWebGLCanvasSurface(cskia) || CK.MakeSWCanvasSurface(cskia);
+  const p = k => { const x = new CK.Paint(); x.setAntiAlias(true); x.setColor(hexToCk(col[k])); return x; };
+  ckPaints = { right: p('right'), left: p('left'), white: p('white'), black: p('black'), line: p('line') };
+}
+function drawSkia(t) {
+  if (sizeCanvas(cskia) || !surf) makeSurface();
+  const c = surf.getCanvas(), w = cskia.width, h = cskia.height, L = layout(w, h);
+  c.clear(CK.TRANSPARENT);
+  for (const n of visible(t)) { const x = (n.p - ROLL_LOW) * L.colW, y1 = L.rollH - (n.t - t) * L.pps, y0 = y1 - n.d * L.pps;
+    c.drawRRect(CK.RRectXY(CK.LTRBRect(x + 1, y0, x + L.colW - 1, y0 + Math.max(4, y1 - y0)), 3, 3), n.right ? ckPaints.right : ckPaints.left); }
+  c.drawRect(CK.LTRBRect(0, L.rollH, w, h), ckPaints.white);
+  for (let m = ROLL_LOW; m <= ROLL_HIGH; m++) if (isBlack(m)) c.drawRect(CK.LTRBRect((m - ROLL_LOW) * L.colW, L.rollH, (m - ROLL_LOW + 1) * L.colW, L.rollH + L.keyH * 0.62), ckPaints.black);
+  surf.flush();
+}
+
+function frame(ts) {
+  if (!rollOn) return;
+  if (lastFrame && benchUntil) frames.push(ts - lastFrame);
+  lastFrame = ts;
+  const t = now() % songLen, a = performance.now();
+  if (ctx) { for (const n of notes) { if (n.t <= playedUpTo) continue; if (n.t > t) break; if (n.t > playedUpTo && n.t <= t && Math.random() < 0.15) voice(n.p, null, 0.3, 0.5); } playedUpTo = t; }
+  engine === 'skia' && CK ? drawSkia(t) : drawCanvas(t);
+  if (benchUntil) draws.push(performance.now() - a);
+  if (benchUntil && performance.now() > benchUntil) finishBench();
+  requestAnimationFrame(frame);
+}
+function startRoll() { col = colors(); if (rollOn) return; rollOn = true; lastFrame = 0; requestAnimationFrame(frame); }
+$('engine').addEventListener('change', async e => {
+  engine = e.target.value; c2d.style.display = engine === 'canvas' ? 'block' : 'none'; cskia.style.display = engine === 'skia' ? 'block' : 'none';
+  if (engine === 'skia') { $('bench-state').textContent = 'Loading Skia...'; try { await loadSkia(); col = colors(); makeSurface(); $('bench-state').textContent = 'Skia ready.'; } catch (err) { $('bench-state').textContent = 'Skia failed to load: ' + err; } }
+});
+$('density').addEventListener('change', e => { songLen = makeSong(+e.target.value); });
+$('stage').addEventListener('pointerdown', () => { if (!ctx) startAudio(); });
+let runN = 0;
+$('bench').addEventListener('click', () => {
+  if (engine === 'skia' && !CK) { $('bench-state').textContent = 'Wait for Skia to load.'; return; }
+  frames = []; draws = []; benchUntil = performance.now() + 10000; $('bench').disabled = true; $('bench-state').textContent = 'Running 10 s. Keep this tab in front.';
+});
+function finishBench() {
+  benchUntil = 0; $('bench').disabled = false;
+  const p50 = q(frames, .5), p95 = q(frames, .95), slow = frames.filter(f => f > 20).length / frames.length * 100, d95 = q(draws, .95);
+  $('r-p50').textContent = fmt(p50); $('r-p95').textContent = fmt(p95); $('r-slow').textContent = fmt(slow); $('r-draw').textContent = fmt(d95, 2);
+  const run = { renderer: engine, notesOnScreen: +$('density').value, frameP50Ms: +fmt(p50), frameP95Ms: +fmt(p95), slowFramePct: +fmt(slow), drawP95Ms: +fmt(d95, 2), frames: frames.length };
+  results.renderer.push(run); runN++;
+  const tb = $('runs'); if (runN === 1) tb.innerHTML = '';
+  tb.insertAdjacentHTML('afterbegin', `<tr><td>${runN}</td><td>${engine === 'skia' ? 'Skia' : 'Canvas 2D'}</td><td class="num">${run.notesOnScreen}</td><td class="num">${fmt(p50)}</td><td class="num">${fmt(p95)}</td><td class="num">${fmt(slow)}</td><td class="num">${fmt(d95, 2)}</td></tr>`);
+  $('bench-state').textContent = 'Done. Switch renderer and run again to compare.'; render();
+}
+
+$('copy').addEventListener('click', async () => {
+  const text = $('out').textContent;
+  try { await navigator.clipboard.writeText(text); $('copy-state').textContent = 'Copied. Paste it into the thread.'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('out')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copy-state').textContent = 'Copy is blocked here, so the text is selected. Copy it with your keyboard or long-press.'; }
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { col = colors(); if (CK && surf) makeSurface(); });
+route(); render();
+</script>
